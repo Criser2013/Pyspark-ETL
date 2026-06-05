@@ -1,0 +1,139 @@
+from etl.extract import extract_excel, extract_sql
+from etl.load import load_to_db
+from etl.transform import transform_to_clean_data, transform_ml_data
+from ml.data import split_data
+from ml.model import create_model, train_model, evaluate_model
+from ml.io import save_pipeline, load_pipeline, export_model_to_onnx
+from constants import NUMS, BOOLEANS, DISEASES, DTYPES
+from pandas import DataFrame
+
+from flask import Flask, request, jsonify
+from dotenv import load_dotenv
+from os import getenv
+
+load_dotenv()
+
+DB_HOST = getenv("DB_HOST")
+DB_PORT = getenv("DB_PORT")
+DB_USER = getenv("DB_USER")
+DB_PASSWORD = getenv("DB_PASSWORD")
+DB_NAME = getenv("DB_NAME")
+
+app = Flask(__name__)
+
+@app.route("/raw-to-bronze", methods=["POST"])
+def extract_data():
+    try:
+        request_data = request.get_json()
+        PATH = f"/app/data/{request_data['file_name']}"
+        AUX = BOOLEANS.copy()
+        AUX[2] = "Procedimiento Quirurgicos / Traumatismo Grave en los últimos 15 dias"
+
+        df = extract_excel(PATH, sheet_name=request_data["sheet_name"])
+        df = df[NUMS + AUX + ["Edad", "Género", "Otra Enfermedad", "Fiebre", "TEP"]]
+        df = df.rename(columns={"Procedimiento Quirurgicos / Traumatismo Grave en los últimos 15 dias": "Cirugía reciente"})
+
+        load_to_db(df, "raw_pe_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, "bronze")
+        return jsonify({"success": True, "message": f"Raw data extracted and loaded successfully.{df.shape[0]} rows processed."}), 201
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+
+@app.route("/bronze-to-silver", methods=["POST"])
+def transform_data():
+    try:
+        df = extract_sql("SELECT * FROM bronze.raw_pe_data;", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, dtypes=DTYPES)
+        df = transform_to_clean_data(df)
+
+        load_to_db(df, "clean_pe_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, "silver")
+        return jsonify({"success": True, "message": f"Data cleaned and filled successfully.{df.shape[0]} rows processed."}), 201
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+
+@app.route("/silver-to-gold", methods=["POST"])
+def load_data():
+    try:
+        df = extract_sql("SELECT * FROM silver.clean_pe_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
+        df = transform_ml_data(df)
+        load_to_db(df, "ml_train_pe_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, "gold")
+
+        return jsonify({"success": True, "message": f"ML training data prepared successfully.{df.shape[0]} rows processed."}), 201
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+
+@app.route("/instantiate-ml-pipeline", methods=["POST"])
+def instantiate_ml_pipeline():
+    try:
+        PATH = "/app/models/untrained_pipeline.pkl"
+        pipeline = create_model()
+        save_pipeline(pipeline, PATH)
+        return jsonify({"success": True, "message": "ML pipeline instantiated successfully."}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+
+@app.route("/split-ml-data", methods=["POST"])
+def split_ml_data():
+    try:
+        request_data = request.get_json()
+        df = extract_sql("SELECT * FROM gold.ml_train_pe_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
+        train, test = split_data(df, request_data["train_size"], request_data["test_size"])
+
+        load_to_db(train, "train_ml_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, "gold")
+        load_to_db(test, "test_ml_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, "gold")
+
+        return jsonify({"success": True, "message": f"ML data split successfully. Train: {train.shape[0]} rows, Test: {test.shape[0]} rows"}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+
+@app.route("/train-ml-model", methods=["POST"])
+def train_ml_model():
+    try:
+        path = "/app/models/untrained_pipeline.pkl"
+        pipeline = load_pipeline(path)
+
+        train_data = extract_sql("SELECT * FROM gold.train_ml_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
+        pipeline = train_model(pipeline, train_data.drop(columns=["TEP"]), train_data["TEP"])
+
+        path = path.replace("untrained", "trained")
+        save_pipeline(pipeline, path)
+
+        return jsonify({"success": True, "message": "ML model trained and saved successfully."}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+
+@app.route("/evaluate-ml-model", methods=["POST"])
+def evaluate_ml_model():
+    try:
+        PATH = "/app/models/trained_pipeline.pkl"
+        pipeline = load_pipeline(PATH)
+
+        test_data = extract_sql("SELECT * FROM gold.test_ml_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
+        metrics = evaluate_model(pipeline, test_data.drop(columns=["TEP"]), test_data["TEP"])
+
+        load_to_db(DataFrame(metrics, index=[0]), "model_metrics", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, "gold")
+
+        return jsonify({"success": True, "message": "ML model evaluated successfully.", "metrics": metrics}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+
+@app.route("/export-onnx", methods=["POST"])
+def export_onnx():
+    try:
+        TRAIN_DATA = extract_sql("SELECT * FROM gold.train_ml_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
+        request_data = request.get_json()
+        PATH = "/app/models/trained_pipeline.pkl"
+        pipeline = load_pipeline(PATH)
+
+        onnx_path = f"/app/models/{request_data['model_name']}.onnx"
+        export_model_to_onnx(pipeline, TRAIN_DATA, onnx_path)
+
+        return jsonify({"success": True, "message": "ML model exported to ONNX format successfully."}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+
+@app.route("/healthcheck", methods=["GET"])
+def health_check():
+    return jsonify({"success": True, "message": "healthy"}), 200
+
+if __name__ == "__main__":
+    app.run(port=5000, host="0.0.0.0", debug=True)

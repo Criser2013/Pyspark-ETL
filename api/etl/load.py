@@ -1,0 +1,25 @@
+from sqlalchemy import create_engine, text
+from pandas import DataFrame
+
+def load_to_db(df: DataFrame, table_name: str, user: str, password: str, host: str, port: str, database: str, schema: str = "public"):
+    """
+    Loads a DataFrame into a PostgreSQL database table. Creates the schema if it does not exist.
+
+    Args:
+        df (DataFrame): The DataFrame to load into the database.
+        table_name (str): The name of the target table in the database.
+        user (str): The database user.
+        password (str): The database password.
+        host (str): The database host.
+        port (str): The database port.
+        database (str): The database name.
+        schema (str, optional): The schema to use. Defaults to "public".
+    """
+    URL = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
+    engine = create_engine(URL)
+
+    with engine.connect() as connection:
+        connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema};"))
+        connection.commit()
+
+    df.to_sql(table_name, con=engine, if_exists='replace', index=False, schema=schema)

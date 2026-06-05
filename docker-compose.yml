@@ -1,0 +1,78 @@
+services:
+  airflow:
+    image: criser2013/airflow:slim-3.2.2-python3.13
+    build:
+      context: .
+      dockerfile: airflow.Dockerfile
+      args:
+        AIRFLOW_VERSION: ${AIRFLOW_VERSION}
+    volumes:
+      - ./dags:/opt/airflow/dags
+    ports:
+      - 8080:8080
+    networks:
+      - etl-network
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${DB_USER}:${DB_PASSWORD}@postgres:5432/${DB_NAME}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+      AIRFLOW_VAR_API_URL: etl:5000
+      AIRFLOW_VAR_EXTRACT_ENDPOINT: /raw-to-bronze
+      AIRFLOW_VAR_CLEAN_ENDPOINT: /bronze-to-silver
+      AIRFLOW_VAR_FILL_ENDPOINT: /silver-to-gold
+      AIRFLOW_VAR_PIPELINE_INSTANTIATION_ENDPOINT: /instantiate-ml-pipeline
+      AIRFLOW_VAR_SPLIT_DATA_ENDPOINT: /split-ml-data
+      AIRFLOW_VAR_TRAIN_MODEL_ENDPOINT: /train-ml-model
+      AIRFLOW_VAR_EVALUATE_MODEL_ENDPOINT: /evaluate-ml-model
+      AIRFLOW_VAR_MODEL_EXPORT_ENDPOINT: /export-onnx
+      AIRFLOW_WEB_USERNAME: ${AIRFLOW_USERNAME}
+      AIRFLOW_WEB_PASSWORD: ${AIRFLOW_PASSWORD}
+      AIRFLOW_USER_EMAIL: ${AIRFLOW_USER_EMAIL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      etl:
+        condition: service_healthy
+
+  etl:
+    image: criser2013/etl-pandas-flask:alpine3.21-python3.13.5
+    build:
+      context: .
+      dockerfile: api.Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./api/models:/app/models
+    networks:
+      - etl-network
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+
+  postgres:
+    image: postgres:18.4-alpine3.23
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    networks:
+      - etl-network
+
+volumes:
+  postgres_data:
+
+networks:
+  etl-network:
+    driver: bridge
