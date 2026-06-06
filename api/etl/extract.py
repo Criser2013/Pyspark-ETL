@@ -1,8 +1,10 @@
-
 from pyspark.sql import SparkSession, DataFrame
 from pandas import read_excel
 
-def extract_excel(spark_session: SparkSession, path: str, sheet_name: str|int = 0) -> DataFrame:
+
+def extract_excel(
+    spark_session: SparkSession, path: str, sheet_name: str | int = 0
+) -> DataFrame:
     """
     Reads an Excel file and returns a DataFrame. Treats common placeholders as NA.
 
@@ -15,10 +17,20 @@ def extract_excel(spark_session: SparkSession, path: str, sheet_name: str|int = 
         DataFrame: A PySpark DataFrame containing the data from the specified Excel sheet.
     """
     NA = ["NA", "NaN", "", "na", "N/A", "en estudio"]
-    DF  = read_excel(path, sheet_name=sheet_name, na_values=NA)
+    DF = read_excel(path, sheet_name=sheet_name, na_values=NA)
     return spark_session.createDataFrame(DF)
 
-def extract_sql(spark_session: SparkSession, table: str, user: str, password: str, host: str, port: str, database: str, dtypes: dict|None = None) -> DataFrame:
+
+def extract_sql(
+    spark_session: SparkSession,
+    table: str,
+    user: str,
+    password: str,
+    host: str,
+    port: str,
+    database: str,
+    dtypes: dict | None = None,
+) -> DataFrame:
     """
     Extracts data from a PostgreSQL database and returns a DataFrame.
 
@@ -34,4 +46,12 @@ def extract_sql(spark_session: SparkSession, table: str, user: str, password: st
         DataFrame: A PySpark DataFrame containing the results of the SQL query.
     """
     URL = f"jdbc:postgresql://{host}:{port}/{database}"
-    return spark_session.read.jdbc(URL, table, properties={"user": user, "password": password})
+    return spark_session.read.jdbc(
+        URL,
+        table,
+        properties={
+            "user": user,
+            "password": password,
+            "driver": "org.postgresql.Driver",
+        },
+    )

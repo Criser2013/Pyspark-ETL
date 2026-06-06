@@ -21,7 +21,7 @@ DB_PASSWORD = getenv("DB_PASSWORD")
 DB_NAME = getenv("DB_NAME")
 
 app = Flask(__name__)
-app.spark = SparkSession.builder.appName("PE_Prediction").getOrCreate()
+app.spark = SparkSession.builder.appName("PE_Prediction").config("spark.jars.packages", "org.postgresql:postgresql:42.7.3").getOrCreate()
 
 @app.route("/raw-to-bronze", methods=["POST"])
 def extract_data():

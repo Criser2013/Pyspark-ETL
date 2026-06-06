@@ -1,7 +1,16 @@
-from sqlalchemy import create_engine, text
-from pandas import DataFrame
+from pyspark.sql import DataFrame
 
-def load_to_db(df: DataFrame, table_name: str, user: str, password: str, host: str, port: str, database: str, schema: str = "public"):
+
+def load_to_db(
+    df: DataFrame,
+    table_name: str,
+    user: str,
+    password: str,
+    host: str,
+    port: str,
+    database: str,
+    schema: str = "public",
+):
     """
     Loads a DataFrame into a PostgreSQL database table. Creates the schema if it does not exist.
 
@@ -15,11 +24,15 @@ def load_to_db(df: DataFrame, table_name: str, user: str, password: str, host: s
         database (str): The database name.
         schema (str, optional): The schema to use. Defaults to "public".
     """
-    URL = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
-    engine = create_engine(URL)
+    URL = f"jdbc:postgresql://{host}:{port}/{database}"
 
-    with engine.connect() as connection:
-        connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema};"))
-        connection.commit()
-
-    df.to_sql(table_name, con=engine, if_exists='replace', index=False, schema=schema)
+    df.write.jdbc(
+        URL,
+        table=f"{schema}.{table_name}",
+        mode="overwrite",
+        properties={
+            "user": user,
+            "password": password,
+            "driver": "org.postgresql.Driver",
+        },
+    )
