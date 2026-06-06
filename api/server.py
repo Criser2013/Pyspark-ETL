@@ -4,7 +4,7 @@ from etl.transform import transform_to_clean_data, transform_ml_data
 from ml.data import split_data
 from ml.model import create_model, train_model, evaluate_model
 from ml.io import save_pipeline, load_pipeline, export_model_to_onnx
-from constants import NUMS, BOOLEANS, DTYPES
+from constants import NUMS, BOOLEANS, DTYPES, INITIAL_DTYPES
 from pandas import DataFrame
 from pyspark.sql import SparkSession
 
@@ -31,7 +31,7 @@ def extract_data():
         AUX = BOOLEANS.copy()
         AUX[2] = "Procedimiento Quirurgicos / Traumatismo Grave en los últimos 15 dias"
 
-        df = extract_excel(PATH, sheet_name=request_data["sheet_name"])
+        df = extract_excel(app.spark, PATH, INITIAL_DTYPES, request_data["sheet_name"])
         df = df[NUMS + AUX + ["Edad", "Género", "Otra Enfermedad", "Fiebre", "TEP"]]
         df = df.rename(columns={"Procedimiento Quirurgicos / Traumatismo Grave en los últimos 15 dias": "Cirugía reciente"})
 

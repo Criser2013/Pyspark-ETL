@@ -1,3 +1,4 @@
+
 def eval_interval(val:int|float, intervals: tuple[tuple]) -> int:
     """
     Evaluates a numeric value and assigns it to an interval based on the provided intervals.
@@ -21,27 +22,6 @@ def eval_interval(val:int|float, intervals: tuple[tuple]) -> int:
             if (val < upper):
                 return assigned_value
     return -1
-
-def proc_boolean(data: str) -> int|float:
-    """
-    Transforms a string representing a boolean value into an integer (1 or 0). Treats common placeholders as NA.
-
-    Args:
-        data (str): The string to transform.
-    
-    Returns:
-        int|float: 1 for true values, 0 for false values.
-    """
-    if isinstance(data, float) and (data not in (1.0, 0.0)):  # Check for NaN
-        return float("nan")
-    
-    data = data.lower()
-    if data in ("1", "0"):
-        return int(data)
-    elif data in ("ni", "no", "n"):
-        return 0
-    else:
-        return 1
     
 def proc_other_diseases(data: dict, diseases: list) -> dict:
     """

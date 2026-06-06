@@ -1,9 +1,10 @@
 from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.types import StructType
 from pandas import read_excel
 
 
 def extract_excel(
-    spark_session: SparkSession, path: str, sheet_name: str | int = 0
+    spark_session: SparkSession, path: str, schema: StructType | None = None, sheet_name: str | int = 0
 ) -> DataFrame:
     """
     Reads an Excel file and returns a DataFrame. Treats common placeholders as NA.
@@ -11,6 +12,7 @@ def extract_excel(
     Args:
         spark_session (SparkSession): The PySpark session.
         path (str): The file path to the Excel file.
+        schema (StructType | None, optional): The schema for the DataFrame. Defaults to None.
         sheet_name (str|int, optional): The sheet name or index to read. Defaults to 0 (first sheet).
 
     Returns:
@@ -18,7 +20,7 @@ def extract_excel(
     """
     NA = ["NA", "NaN", "", "na", "N/A", "en estudio"]
     DF = read_excel(path, sheet_name=sheet_name, na_values=NA)
-    return spark_session.createDataFrame(DF)
+    return spark_session.createDataFrame(DF, schema=schema)
 
 
 def extract_sql(

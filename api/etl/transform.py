@@ -1,6 +1,7 @@
-from utils import eval_interval, proc_boolean, proc_other_diseases
+from utils import eval_interval, proc_other_diseases
 from constants import NUMS, BOOLEANS, DISEASES
-from pandas import Series, DataFrame
+from pyspark.sql import DataFrame, Column
+from pyspark.sql.functions import transform, replace, lower, when, greatest
 
 
 def fill_na_numeric(df: DataFrame) -> DataFrame:
@@ -45,34 +46,33 @@ def fill_na_boolean(df: DataFrame) -> DataFrame:
     return df.fillna(MODE).astype("int")
 
 
-def transform_gender(gender: Series) -> Series:
+def transform_gender(gender: Column) -> Column:
     """
     Transforms the "Género" column from categorical values ("F", "M") to numeric values (0, 1).
 
     Args:
-        gender (Series): A Series containing the "Género" column with categorical values.
+        gender (Column): A Column containing the "Género" column with categorical values.
     
     Returns:
-        Series: A Series with the "Género" column transformed to numeric values.
+        Column: A Column with the "Género" column transformed to numeric values.
     """
     female = gender.replace("F|F ", 0, regex=True)
     male = female.replace("M|M ", 1, regex=True)
     return male.astype("int")
 
 
-def transform_fever(fever: Series) -> Series:
+def transform_fever(fever: Column) -> Column:
     """
     Transforms the "Fiebre" column from raw values (temperature in Celsius upper or equal to 38 or binary indicator) 
     to a binary indicator (0, 1) where 1 indicates the presence of fever.
 
     Args:
-        fever (Series): A Series containing the "Fiebre" column with raw values.
+        fever (Column): A Column representing the "Fiebre" column with raw values.
 
     Returns:
-        Series: A Series with the "Fiebre" column transformed to a binary indicator.
+        Column: A Column with the "Fiebre" column transformed to a binary indicator.
     """
-    aux = fever.apply(lambda x: 1 if (x >= 38) or (x == 1) else 0)
-    return aux.astype("int")
+    return fever.when((fever >= 38) | (fever == 1), 1).otherwise(0)
 
 
 def scale_column(column: Series, factor: float, upper_bound: float|None = None) -> Series:
@@ -106,15 +106,19 @@ def transform_other_diseases(data: DataFrame, diseases: list) -> DataFrame | Ser
     return data.apply(proc_other_diseases, axis=1, diseases=diseases)["Otra Enfermedad"]
 
 
-def transform_boolean(column: Series) -> Series:
+def transform_boolean(data: Column) -> Column:
     """
-    Transforms a boolean column with values like "Sí", "No", "1", "0", etc. to a binary indicator (0, 1).
+    Transforms a string representing a boolean value into an integer (1 or 0). Treats common placeholders as NA.
+
     Args:
-        column (Series): A Series containing the boolean column with raw values.
+        data (Column): The column to transform.
+    
     Returns:
-        Series: A Series with the boolean column transformed to a binary indicator.
+        Column: 1 for true values, 0 for false values.
     """
-    return column.apply(proc_boolean).astype("float")
+    data = data.transform(lower)
+    data = data.transform(when(data.isin("1", "0"), data).when(data.isin("ni", "no", "n"), "0").otherwise("1"))
+    return data.cast("int")
 
 
 def transform_to_clean_data(df: DataFrame) -> DataFrame:
@@ -128,31 +132,30 @@ def transform_to_clean_data(df: DataFrame) -> DataFrame:
     Returns:
         DataFrame: A cleaned and transformed DataFrame ready for analysis or modeling.
     """
-    df["Fiebre"] = transform_fever(df["Fiebre"])
-    df["HB"] = df["HB"].str.replace(",", ".").astype("float")
-    df["PLT"] = df["PLT"].str.replace(",", ".").str.replace("OO", "00").astype("float")
+    df = df.withColumns({
+        "Fiebre": transform(replace("Fiebre", ",", ".").cast("float"), transform_fever),
+        "WBC": replace("WBC", ",", ".").cast("float"),
+        "HB": replace("HB", ",", ".").cast("float"),
+        "PLT": replace(replace("PLT", ",", "."), "OO", "00").cast("float"),
+        "Hemoptisis": replace("Hemoptisis", "N0", "0").cast("int"),
+        "Síntomas disautonomicos": transform("Síntomas disautonomicos", transform_boolean),
+        "Sibilancias": transform("Sibilancias", transform_boolean),
+        "Soplos": transform("Soplos", transform_boolean),
+        "Derrame": transform("Derrame", transform_boolean),
+        "Hematologica": transform("Hematologica", transform_boolean),
+        "Cardíaca": transform("Cardíaca", transform_boolean),
+        "Endocrina": transform("Endocrina", transform_boolean),
+        "Gastrointestinal": transform("Gastrointestinal", transform_boolean),
+        "Hepatopatía crónica": transform("Hepatopatía crónica", transform_boolean),
+        "Neurológica": transform("Neurológica", transform_boolean),
+        "Pulmonar": transform("Pulmonar", transform_boolean),
+        "Renal": transform("Renal", transform_boolean),
+        "Trombofilia": transform("Trombofilia", transform_boolean),
+        "Urológica": transform("Urológica", transform_boolean),
+        "Vascular": transform("Vascular", transform_boolean),
+    })
 
-    df["Hemoptisis"] = df["Hemoptisis"].replace("1", 1).replace("0|N0", 0, regex=True).astype("int")
-    df["Síntomas disautonomicos"] = transform_boolean(df["Síntomas disautonomicos"])
-    df["Sibilancias"] = transform_boolean(df["Sibilancias"])
-    df["Soplos"] = transform_boolean(df["Soplos"])
-    df["Derrame"] = transform_boolean(df["Derrame"])
-
-    df["Hematologica"] = transform_boolean(df["Hematologica"])
-    df["Cardíaca"] = transform_boolean(df["Cardíaca"])
-    df["Endocrina"] = transform_boolean(df["Endocrina"])
-    df["Gastrointestinal"] = transform_boolean(df["Gastrointestinal"])
-    df["Hepatopatía crónica"] = transform_boolean(df["Hepatopatía crónica"])
-    df["Neurológica"] = transform_boolean(df["Neurológica"])
-    df["Pulmonar"] = transform_boolean(df["Pulmonar"])
-    df["Renal"] = transform_boolean(df["Renal"])
-    df["Trombofilia"] = transform_boolean(df["Trombofilia"])
-    df["Urológica"] = transform_boolean(df["Urológica"])
-    df["Vascular"] = transform_boolean(df["Vascular"])
-
-    df["Otra Enfermedad"] = transform_other_diseases(
-        df[["Otra Enfermedad"] + DISEASES], DISEASES
-    )
+    df = df.withColumn("Otra Enfermedad", greatest(*DISEASES))
 
     return df
 
