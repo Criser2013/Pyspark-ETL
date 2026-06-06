@@ -1,15 +1,17 @@
-FROM python:3.14.5-slim
+FROM python:3.14.5-alpine3.23
 
 WORKDIR /app
 
-RUN groupadd appgroup && \
-    useradd -G appgroup appuser
+RUN addgroup -s appuser appgroup && \
+    adduser -G appgroup appuser
 
 COPY --chown=appuser:appgroup ./api /app
 
-RUN apt update && \
-    apt install curl -y --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk update && apk upgrade && \
+    apk add --no-cache curl bash openjdk21
+
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk/bin
+ENV PATH=$JAVA_HOME/bin:$PATH
 
 RUN pip install --upgrade pip \
     && pip install -r /app/requirements.txt --no-cache-dir

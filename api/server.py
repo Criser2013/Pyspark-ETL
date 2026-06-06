@@ -4,8 +4,9 @@ from etl.transform import transform_to_clean_data, transform_ml_data
 from ml.data import split_data
 from ml.model import create_model, train_model, evaluate_model
 from ml.io import save_pipeline, load_pipeline, export_model_to_onnx
-from constants import NUMS, BOOLEANS, DISEASES, DTYPES
+from constants import NUMS, BOOLEANS, DTYPES
 from pandas import DataFrame
+from pyspark.sql import SparkSession
 
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
@@ -20,6 +21,7 @@ DB_PASSWORD = getenv("DB_PASSWORD")
 DB_NAME = getenv("DB_NAME")
 
 app = Flask(__name__)
+app.spark = SparkSession.builder.appName("PE_Prediction").getOrCreate()
 
 @app.route("/raw-to-bronze", methods=["POST"])
 def extract_data():
