@@ -1,49 +1,44 @@
-from utils import eval_interval, proc_other_diseases
+from utils import eval_interval
 from constants import NUMS, BOOLEANS, DISEASES
 from pyspark.sql import DataFrame, Column
-from pyspark.sql.functions import transform, replace, lower, when, greatest
+from pyspark.sql.functions import transform, replace, lower, when, greatest, mode, trim, median, percentile
 
 
-def fill_na_numeric(df: DataFrame) -> DataFrame:
+def fill_na_numeric(col: Column) -> Column:
     """
     Fills NA values in numeric columns with the median value of each column and replaces outliers with the same median value.
 
     Args:
-        df (DataFrame): A DataFrame containing only numeric columns.
+        col (Column): Column to be imputed.
     
     Returns:
-        DataFrame: A DataFrame with NA values filled and outliers replaced.
+        Column: A Column with NA values filled and outliers replaced.
     """
-    MEDIAN = df.median()
-    Q1 = df.quantile(0.25)
-    Q3 = df.quantile(0.75)
+    MEDIAN = median(col)
+    Q1 = percentile(col, 0.25)
+    Q3 = percentile(col, 0.75)
     RIC = Q3 - Q1
     UPPER_BOUND = Q3 + 1.5*RIC
     LOWER_BOUND = Q1 - 1.5*RIC
 
-    df = df.fillna(MEDIAN)
+    col = col.when(col.isNull(), MEDIAN).otherwise(col)
+    col = col.when((col < LOWER_BOUND) | (col > UPPER_BOUND), MEDIAN).otherwise(col)
 
-    # Replacing outliers with median values
-    for i in df.columns:
-        df[i] = df[i].apply(
-            lambda x: x if (x > LOWER_BOUND.loc[i]) and (x<UPPER_BOUND.loc[i]) else MEDIAN.loc[i]
-            )
-
-    return df
+    return col
 
 
-def fill_na_boolean(df: DataFrame) -> DataFrame:
+def fill_na_boolean(col: Column) -> Column:
     """
     Fills NA values in boolean columns with the mode value of each column.
 
     Args:
-        df (DataFrame): A DataFrame containing only boolean columns.
+        col (Column): Column to be imputed.
 
     Returns:
-        DataFrame: A DataFrame with NA values filled.
+        Column: A Column with NA values filled.
     """
-    MODE = df.mode().iloc[0]
-    return df.fillna(MODE).astype("int")
+    MODE = mode(col)
+    return col.when(col.isNull(), MODE).otherwise(col)
 
 
 def transform_gender(gender: Column) -> Column:
@@ -56,9 +51,10 @@ def transform_gender(gender: Column) -> Column:
     Returns:
         Column: A Column with the "Género" column transformed to numeric values.
     """
-    female = gender.replace("F|F ", 0, regex=True)
-    male = female.replace("M|M ", 1, regex=True)
-    return male.astype("int")
+    gender_lower = lower(trim(gender))
+    male = replace(gender_lower, "m", "1")
+    female = replace(male, "f", "0")
+    return female.cast("int")
 
 
 def transform_fever(fever: Column) -> Column:
@@ -75,35 +71,24 @@ def transform_fever(fever: Column) -> Column:
     return fever.when((fever >= 38) | (fever == 1), 1).otherwise(0)
 
 
-def scale_column(column: Series, factor: float, upper_bound: float|None = None) -> Series:
+def scale_column(column: Column, factor: float, upper_bound: float|None = None) -> Column:
     """
     Scales the values in a column by a given factor, with an optional upper bound.
 
     Args:
-        column (Series): A Series containing the column to be scaled.
+        column (Column): A Column containing the column to be scaled.
         factor (float): The factor by which to scale the values.
         upper_bound (float|None): The upper bound for the scaled values. If None, uses the factor as the upper bound.
 
     Returns:
-        Series: A Series with the scaled values.
+        Column: A Column with the scaled values.
     """
     if upper_bound is None:
         upper_bound = factor
 
-    return column.apply(lambda x: x * factor if (x>0) and (x<upper_bound) else x)
-
-
-def transform_other_diseases(data: DataFrame, diseases: list) -> DataFrame | Series:
-    """
-    Transforms the "Otra Enfermedad" column to reflect the presence of other diseases based on the values in the disease columns.
-
-    Args:
-        data (DataFrame): A DataFrame containing the "Otra Enfermedad" column and the disease columns.
-        diseases (list): A list of disease column names to check for the presence of other diseases.
-    Returns:
-        DataFrame | Series: A Series with the "Otra Enfermedad" column transformed to reflect the presence of other diseases.
-    """
-    return data.apply(proc_other_diseases, axis=1, diseases=diseases)["Otra Enfermedad"]
+    return column.when(
+        (column > 0) & (column < upper_bound), column * factor
+        ).otherwise(column)
 
 
 def transform_boolean(data: Column) -> Column:
@@ -116,8 +101,8 @@ def transform_boolean(data: Column) -> Column:
     Returns:
         Column: 1 for true values, 0 for false values.
     """
-    data = data.transform(lower)
-    data = data.transform(when(data.isin("1", "0"), data).when(data.isin("ni", "no", "n"), "0").otherwise("1"))
+    data = lower(trim(data))
+    data = data.transform(lambda x: when(x.isin("1", "0"), x).when(x.isin("ni", "no", "n"), "0").otherwise("1"))
     return data.cast("int")
 
 
@@ -174,37 +159,44 @@ def transform_ml_data(df: DataFrame) -> DataFrame:
     INF = float("inf")
 
     # Filling NA values
-    df[NUMS] = fill_na_numeric(df[NUMS])
-    df[BOOLEANS] = fill_na_boolean(df[BOOLEANS])
+    mapper = { f"{i}": transform(i, fill_na_numeric) for i in NUMS }
+
+    for i in BOOLEANS:
+        mapper[i] = transform(i, fill_na_boolean)
+
+    mapper["Género"] = transform("Género", transform_gender)
+
+    df = df.withColumns(mapper)
 
     # Scaling numeric values on some columns
-    df["Saturación de la sangre"] = scale_column(df["Saturación de la sangre"], 100, upper_bound=1).astype("int")
-    df["WBC"] = scale_column(df["WBC"], 1000).astype("int")
-    df["PLT"] = scale_column(df["PLT"], 1000).astype("int")
+    df = df.withColumn("Saturación de la sangre", scale_column(df["Saturación de la sangre"], 100, 1).astype("int"))
+    df = df.withColumn("WBC", scale_column(df["WBC"], 1000).astype("int"))
+    df = df.withColumn("PLT", scale_column(df["PLT"], 1000).astype("int"))
 
     # Converting raw numeric values to intervals
-    df["Edad"] = df["Edad"].apply(eval_interval, intervals=((0, 20, 0), (20, 41, 1), (41, 61, 2), (61, 81, 3), (81, INF, 4)))
-    df["Frecuencia respiratoria"] = df["Frecuencia respiratoria"].apply(eval_interval, intervals=((15,20,1),(20,25,2),(25,30,3),(30,35,4),(35,40,5),
-                                                                                                  (40,45,6),(45,50,7),(50,55,8),(55,60,9),(-INF,15,10),
-                                                                                                  (60,INF,11))).astype("int")
-    df["Saturación de la sangre"] = df["Saturación de la sangre"].apply(eval_interval, intervals=((50,55,1),(55,60,2),(60,65,3),(65,70,4),(70,75,5),
-                                                                                                  (75,80,6),(80,85,7),(85,90,8),(90,95,9),(95,100,10),(-INF,50,11),
-                                                                                                  (100,INF,12))).astype("int")
-    df["Frecuencia cardíaca"] = df["Frecuencia cardíaca"].apply(eval_interval, intervals=((50,70,1),(70,90,2),(90,110,3),(110,130,4),(130,150,5),
-                                                                                                  (150,170,6),(170,190,7),(190,210,8),(-INF,50,9),
-                                                                                                  (210,INF,10))).astype("int")
-    df["Presión sistólica"] = df["Presión sistólica"].apply(eval_interval, intervals=((50,70,1),(70,90,2),(90,110,3),(110,130,4),(130,150,5),(150,170,6),
-                                                                                       (170,190,7),(190,210,8),(-INF,50,9),(210,INF,10))).astype("int")
-    df["Presión diastólica"] = df["Presión diastólica"].apply(eval_interval, intervals=((40,50,1),(50,60,2),(60,70,3),(70,80,4),(80,90,5),(90,100,6),
-                                                                                         (100,110,7),(110,120,8),(-INF,40,9),(120,INF,10))).astype("int")
-    df["WBC"] = df["WBC"].apply(eval_interval, intervals=((2000,4000,1),(4000,10000,2),(10000,15000,3),(15000,20000,4),(20000,30000,5),(30000,35000,6),
-                                                          (-INF,2000,7),(35000,INF,8))).astype("int")
-    df["HB"] = df["HB"].apply(eval_interval, intervals=((6,8,1),(8,10,2),(10,12,3),(12,14,4),(14,16,5),(16,18,6),(18,20,7),(20,22,8),(-INF,6,9),(22,INF,10)))
-    df["PLT"] = df["PLT"].apply(eval_interval, intervals=((10000,50000,1),(50000,100000,2),(100000,150000,3),(150000,400000,4),(400000,500000,5),(500000,600000,6),
-                                                          (600000,700000,7),(-INF,10000,8),(700000,INF,9))).astype("int")
-    df["Género"] = transform_gender(df["Género"])
+    df = df.withColumns({
+        "Edad": eval_interval(df["Edad"], ((0, 20, 0), (20, 41, 1), (41, 61, 2), (61, 81, 3), (81, INF, 4))),
+        "Frecuencia respiratoria": eval_interval(df["Frecuencia respiratoria"], ((15,20,1),(20,25,2),(25,30,3),(30,35,4),(35,40,5),
+                                                                                 (40,45,6),(45,50,7),(50,55,8),(55,60,9),(-INF,15,10),
+                                                                                 (60,INF,11))),
+        "Saturación de la sangre": eval_interval(df["Saturación de la sangre"], ((15,20,1),(20,25,2),(25,30,3),(30,35,4),(35,40,5),
+                                                                                 (40,45,6),(45,50,7),(50,55,8),(55,60,9),(-INF,15,10),
+                                                                                 (60,INF,11))),
+        "Frecuencia cardíaca": eval_interval(df["Frecuencia cardíaca"], ((50,70,1),(70,90,2),(90,110,3),(110,130,4),(130,150,5),
+                                                                         (150,170,6),(170,190,7),(190,210,8),(-INF,50,9),
+                                                                         (210,INF,10))),
+        "Presión sistólica": eval_interval(df["Presión sistólica"], ((50,70,1),(70,90,2),(90,110,3),(110,130,4),(130,150,5),(150,170,6),
+                                                                     (170,190,7),(190,210,8),(-INF,50,9),(210,INF,10))),
+        "Presión diastólica": eval_interval(df["Presión diastólica"], ((40,50,1),(50,60,2),(60,70,3),(70,80,4),(80,90,5),(90,100,6),
+                                                                       (100,110,7),(110,120,8),(-INF,40,9),(120,INF,10))),
+        "WBC": eval_interval(df["WBC"], ((2000,4000,1),(4000,10000,2),(10000,15000,3),(15000,20000,4),(20000,30000,5),(30000,35000,6),
+                                         (-INF,2000,7),(35000,INF,8))),
+        "HB": eval_interval(df["HB"], ((6,8,1),(8,10,2),(10,12,3),(12,14,4),(14,16,5),(16,18,6),(18,20,7),(20,22,8),(-INF,6,9),(22,INF,10))),
+        "PLT": eval_interval(df["PLT"], ((10000,50000,1),(50000,100000,2),(100000,150000,3),(150000,400000,4),(400000,500000,5),(500000,600000,6),
+                                         (600000,700000,7),(-INF,10000,8),(700000,INF,9)))
+    })
 
     # Updating "Otra Enfermedad" column to reflect new changes on disease columns
-    df["Otra Enfermedad"] = transform_other_diseases(df[["Otra Enfermedad"] + DISEASES], DISEASES)
+    df = df.withColumn("Otra Enfermedad", greatest(*DISEASES))
 
     return df

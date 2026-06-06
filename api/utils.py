@@ -1,45 +1,36 @@
+from pyspark.sql.functions import when
+from pyspark.sql import Column
 
-def eval_interval(val:int|float, intervals: tuple[tuple]) -> int:
+
+def eval_interval(col: Column, intervals: tuple) -> Column:
     """
     Evaluates a numeric value and assigns it to an interval based on the provided intervals.
 
     Args:
-        val (int|float): The numeric value to evaluate.
-        intervals (tuple[tuple]): A tuple of tuples, where each inner tuple represents an interval in the form (lower_bound, upper_bound, assigned_value).
+        col (Column): The numeric value to evaluate.
+        intervals (tuple): A tuple of tuples, where each inner tuple represents an
+        interval in the form (lower_bound, upper_bound, assigned_value).
 
     Returns:
-        int: The assigned value for the interval to which the numeric value belongs.
+        Column: The assigned value for the interval to which the numeric value belongs.
     """
-    inf = float("inf")
+    expr = None
+
     for lower, upper, assigned_value in intervals:
-        if (lower != -inf) and (upper != inf):
-            if (val >= lower) and (val < upper):
-                return assigned_value
-        elif (lower != -inf) and (upper == inf):
-            if (val >= lower):
-                return assigned_value
-        elif (lower == -inf) and (upper != inf):
-            if (val < upper):
-                return assigned_value
-    return -1
-    
-def proc_other_diseases(data: dict, diseases: list) -> dict:
-    """
-    Transforms the "Otra Enfermedad" column based on the presence of other diseases. 
-    If any of the specified diseases is present (value of 1), "Otra Enfermedad" is set to 1, otherwise it is set to 0.
 
-    Args:
-        data (dict): A dictionary containing the values of the "Otra Enfermedad" column and the specified diseases.
-        diseases (list): A list of disease column names to check for presence.
+        if lower != float("-inf") and upper != float("inf"):
+            cond = (col >= lower) & (col < upper)
 
-    Returns:
-        dict: The updated dictionary with the "Otra Enfermedad" column transformed.
-    """
-    for i in diseases:
-        if data[i] == 1:
-            data["Otra Enfermedad"] = 1
-            return data
+        elif lower != float("-inf"):
+            cond = col >= lower
 
-    data["Otra Enfermedad"] = 0
+        else:
+            cond = col < upper
 
-    return data
+        expr = (
+            when(cond, assigned_value)
+            if expr is None
+            else expr.when(cond, assigned_value)
+        )
+
+    return expr.otherwise(-1)
