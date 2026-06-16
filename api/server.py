@@ -266,7 +266,7 @@ def evaluate_ml_model():
             f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
         )
         df_metrics = DataFrame(metrics, index=[0])
-        df_metrics.to_sql("model_metrics", con=ENGINE, if_exists="replace", index=False)
+        df_metrics.to_sql("model_metrics", con=ENGINE, if_exists="replace", index=False, schema="gold")
 
         return (
             jsonify(

@@ -19,11 +19,12 @@ RUN pip install --upgrade pip \
 RUN cd /opt && mkdir jars
 
 RUN wget https://jdbc.postgresql.org/download/postgresql-42.7.3.jar \
-    -o /opt/jars/postgresql-42.7.3.jar
+    -O /opt/jars/postgresql-42.7.3.jar
 
-#HEALTHCHECK --interval=30s --timeout=5s CMD curl -o /dev/null -s -w "%{http_code}\n" localhost:5000/healthcheck || exit 1
+RUN chown -R appuser:appgroup /opt/jars
+
+HEALTHCHECK --interval=30s --timeout=5s CMD curl -o /dev/null -s -w "%{http_code}\n" localhost:5000/healthcheck || exit 1
 
 USER appuser
 
-CMD ["sleep", "infinity"]
-#CMD ["gunicorn", "-w", "1", "--threads", "4", "-b", "0.0.0.0:5000", "server:app"]
+CMD ["gunicorn", "-w", "1", "--threads", "4", "-b", "0.0.0.0:5000", "server:app"]

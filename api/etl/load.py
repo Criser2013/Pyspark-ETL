@@ -32,6 +32,7 @@ def load_to_db(
 
     with ENGINE.connect() as connection:
         connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema};"))
+        connection.commit()
 
     df.write.jdbc(
         URL,
