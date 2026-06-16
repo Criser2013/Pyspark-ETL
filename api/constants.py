@@ -1,4 +1,3 @@
-from pyspark.sql.types import StructType, StructField, IntegerType, FloatType, StringType
 from utils import remove_accents
 from re import sub
 
@@ -32,51 +31,3 @@ DTYPES = {
             "Hipertensión arterial": "int", "Neurológica": "str", "Pulmonar": "str", "Renal": "str", 
             "Trombofilia": "str", "Urológica": "str", "Vascular": "str", "VIH": "float", "TEP": "int"
         }
-
-INITIAL_DTYPES = StructType([
-    StructField("Edad", StringType(), False),
-    StructField("Frecuencia respiratoria", IntegerType(), True),
-    StructField("WBC", StringType(), True),
-    StructField("Saturación de la sangre", IntegerType(), True),
-    StructField("Frecuencia cardíaca", IntegerType(), True),
-    StructField("Presión sistólica", IntegerType(), True),
-    StructField("Presión diastólica", IntegerType(), True),
-    StructField("HB", StringType(), True),
-    StructField("PLT", StringType(), True),
-    StructField("Género", StringType(), False),
-    StructField("Fiebre", FloatType(), True),
-    StructField("Fumador", IntegerType(), True),
-    StructField("Bebedor", IntegerType(), True),
-    StructField("Cirugía reciente", IntegerType(), True),
-    StructField("Inmovilidad de M inferiores", IntegerType(), True),
-    StructField("Viaje prolongado", IntegerType(), True),
-    StructField("TEP - TVP Previo", IntegerType(), True),
-    StructField("Malignidad", IntegerType(), True),
-    StructField("Disnea", IntegerType(), True),
-    StructField("Dolor toracico", IntegerType(), True),
-    StructField("Tos", IntegerType(), True),
-    StructField("Hemoptisis", StringType(), True),
-    StructField("Síntomas disautonomicos", StringType(), True),
-    StructField("Edema de M inferiores", IntegerType(), True),
-    StructField("Crepitaciones", IntegerType(), True),
-    StructField("Sibilancias", StringType(), True),
-    StructField("Soplos", StringType(), True),
-    StructField("Derrame", StringType(), True),
-    StructField("Otra Enfermedad", StringType(), True),
-    StructField("Hematologica", StringType(), True),
-    StructField("Cardíaca", StringType(), True),
-    StructField("Enfermedad coronaria", IntegerType(), True),
-    StructField("Diabetes Mellitus", IntegerType(), True),
-    StructField("Endocrina", StringType(), True),
-    StructField("Gastrointestinal", StringType(), True),
-    StructField("Hepatopatía crónica", StringType(), True),
-    StructField("Hipertensión arterial", IntegerType(), True),
-    StructField("Neurológica", StringType(), True),
-    StructField("Pulmonar", StringType(), True),
-    StructField("Renal", StringType(), True),
-    StructField("Trombofilia", StringType(), True),
-    StructField("Urológica", StringType(), True),
-    StructField("Vascular", StringType(), True),
-    StructField("VIH", IntegerType(), True),
-    StructField("TEP", IntegerType(), False)
-])

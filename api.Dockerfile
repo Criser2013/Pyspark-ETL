@@ -16,10 +16,16 @@ ENV PATH=$JAVA_HOME/bin:$PATH
 RUN pip install --upgrade pip \
     && pip install -r /app/requirements.txt --no-cache-dir
 
+RUN cd /opt && mkdir jars
+
+RUN wget https://jdbc.postgresql.org/download/postgresql-42.7.3.jar \
+    -o /opt/jars/postgresql-42.7.3.jar
+
 RUN chown -R appuser:appgroup /app
 
 HEALTHCHECK --interval=30s --timeout=5s CMD curl -o /dev/null -s -w "%{http_code}\n" localhost:5000/healthcheck || exit 1
 
 USER appuser
 
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "server:app"]
+
+CMD ["gunicorn", "-w", "1", "--threads", "4", "-b", "0.0.0.0:5000", "server:app"]

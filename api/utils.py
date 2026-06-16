@@ -38,5 +38,5 @@ def eval_interval(col: Column, intervals: tuple) -> Column:
 
 
 def remove_accents(texto: str) -> str:
-    nfkd = normalize('NFKD', texto)
-    return "".join([c for c in nfkd if category(c) != 'Mn'])
+    nfkd = normalize("NFKD", texto)
+    return "".join([c for c in nfkd if category(c) != "Mn"])

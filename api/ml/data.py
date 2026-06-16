@@ -1,6 +1,9 @@
 from pyspark.sql import DataFrame
 
-def split_data(data: DataFrame, train_size: float = 0.8, test_size:float = 0.2) -> tuple[DataFrame, DataFrame]:
+
+def split_data(
+    data: DataFrame, train_size: float = 0.8, test_size: float = 0.2
+) -> tuple[DataFrame, DataFrame]:
     """
     Splits the data into training and testing sets.
 
@@ -12,5 +15,5 @@ def split_data(data: DataFrame, train_size: float = 0.8, test_size:float = 0.2) 
         tuple[DataFrame, DataFrame]: The training and testing sets.
     """
     train, test = data.randomSplit([train_size, test_size], seed=123)
-    
+
     return train, test

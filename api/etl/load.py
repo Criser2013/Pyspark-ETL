@@ -1,4 +1,5 @@
 from pyspark.sql import DataFrame
+from sqlalchemy import create_engine, text
 
 
 def load_to_db(
@@ -25,6 +26,12 @@ def load_to_db(
         schema (str, optional): The schema to use. Defaults to "public".
     """
     URL = f"jdbc:postgresql://{host}:{port}/{database}"
+    ENGINE = create_engine(
+        f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
+    )
+
+    with ENGINE.connect() as connection:
+        connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema};"))
 
     df.write.jdbc(
         URL,
