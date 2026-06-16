@@ -1,14 +1,14 @@
-# ETL for Pulmonary Embolism prediction
+# Distributed ETL for Pulmonary Embolism prediction
 
-This is an improved variant of ETL process seen at [Pulmonary Embolism prediction project](https://github.com/Criser2013/Diagnostico-TEP/blob/main/preprocesamiento/Datos%20entrenamiento.ipynb), still using **Pandas** but combining it with **Apache Airflow** to orchestrate data ingestion, processing and ML models building automatically.
+This is an improved variant of ETL process seen at [Pulmonary Embolism prediction using Pandas and Airflow](https://github.com/Criser2013/ADT-ETL) using **Apache Spark** framework to simulate a big data environment where **scikit** and **pandas** aren't enough to satisfy needs related with this scenario. As the same as the original repository, it works using **Apache Airflow** to orchestrate data ingestion, processing and ML models building automatically.
 
 
 ## Tech stack
 
-- **`pandas`:** To run ETL script following *Medallion architecture*.
-- **`scikit-learn`:** To standarize data used to train ML models.
+- **`pyspark`:** To run ETL scripts simulating a distributed data environment following *Medallion architecture*.
+- **`mllib`:** To standarize data used to train ML models on a distributed data environment.
 - **`airflow`:** Was used to orchestrate the entire pipeline.
-- **`flask`:** To develop a small backend server with the purpose of allowing access to **Pandas** and **Scikit** features to Airflow container without needing to increase Airflow image weight and complexity adding more packages and maintaining their responsabilities separed.
+- **`flask`:** To develop a small backend server with the purpose of allowing access to **Apache Spark** features to Airflow container without needing to increase Airflow image weight and complexity adding more packages and maintaining their responsabilities separed.
 - **`postgres`:** Selected data warehouse engine.
 - **`docker compose`:** To easily run each service and allow interactions among between them.
 
