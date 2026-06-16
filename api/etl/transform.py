@@ -1,44 +1,49 @@
 from utils import eval_interval
 from constants import NUMS_CLEANED, BOOLEANS_CLEANED, DISEASES_CLEANED
 from pyspark.sql import DataFrame, Column
-from pyspark.sql.functions import transform, regexp_replace, lower, when, greatest, mode, trim, median, percentile, col
+from pyspark.sql.functions import regexp_replace, lower, when, greatest, mode, trim, median, percentile, col, lit
 
 
-def fill_na_numeric(col: Column) -> Column:
+def fill_na_numeric(df: DataFrame) -> DataFrame:
     """
     Fills NA values in numeric columns with the median value of each column and regexp_replaces outliers with the same median value.
 
     Args:
-        col (Column): Column to be imputed.
+        df (DataFrame): DataFrame containing the column to be imputed.
     
     Returns:
-        Column: A Column with NA values filled and outliers regexp_replaced.
+        DataFrame: A DataFrame with NA values filled and outliers regexp_replaced.
     """
-    MEDIAN = median(col)
-    Q1 = percentile(col, 0.25)
-    Q3 = percentile(col, 0.75)
-    RIC = Q3 - Q1
-    UPPER_BOUND = Q3 + 1.5*RIC
-    LOWER_BOUND = Q1 - 1.5*RIC
 
-    col = col.when(col.isNull(), MEDIAN).otherwise(col)
-    col = col.when((col < LOWER_BOUND) | (col > UPPER_BOUND), MEDIAN).otherwise(col)
+    for i in NUMS_CLEANED:
+        median = df.selectExpr(f"percentile_approx({i}, 0.5) as median").first()["median"]
+        Q1 = df.selectExpr(f"percentile_approx({i}, 0.25) as Q1").first()["Q1"]
+        Q3 = df.selectExpr(f"percentile_approx({i}, 0.75) as Q3").first()["Q3"]
+        RIC = Q3 - Q1
 
-    return col
+        LOWER_BOUND = Q1 - 1.5*RIC
+        UPPER_BOUND = Q3 + 1.5*RIC
+
+        df = df.withColumn(i, when(col(i).isNull(), median).otherwise(col(i)))
+        df = df.withColumn(i, when((col(i) < LOWER_BOUND) | (col(i) > UPPER_BOUND), median).otherwise(col(i)))
+
+    return df
 
 
-def fill_na_boolean(col: Column) -> Column:
+def fill_na_boolean(df: DataFrame) -> DataFrame:
     """
     Fills NA values in boolean columns with the mode value of each column.
 
     Args:
-        col (Column): Column to be imputed.
+        df (DataFrame): DataFrame containing the column to be imputed.
 
     Returns:
-        Column: A Column with NA values filled.
+        DataFrame: A DataFrame with NA values filled.
     """
-    MODE = mode(col)
-    return col.when(col.isNull(), MODE).otherwise(col)
+    for i in BOOLEANS_CLEANED:
+        MODE = df.selectExpr(f"mode({i}) as mode").first()["mode"]
+        df = df.withColumn(i, when(col(i).isNull(), lit(MODE)).otherwise(col(i)))
+    return df
 
 
 def transform_gender(gender: Column) -> Column:
@@ -86,7 +91,7 @@ def scale_column(column: Column, factor: float, upper_bound: float|None = None) 
     if upper_bound is None:
         upper_bound = factor
 
-    return column.when(
+    return when(
         (column > 0) & (column < upper_bound), column * factor
         ).otherwise(column)
 
@@ -158,40 +163,35 @@ def transform_ml_data(df: DataFrame) -> DataFrame:
     INF = float("inf")
 
     # Filling NA values
-    mapper = { f"{i}": transform(i, fill_na_numeric) for i in NUMS_CLEANED }
-
-    for i in BOOLEANS_CLEANED:
-        mapper[i] = transform(i, fill_na_boolean)
-
-    mapper["Género"] = transform("Género", transform_gender)
-
-    df = df.withColumns(mapper)
+    df = fill_na_numeric(df)
+    df = fill_na_boolean(df)
+    df = df.withColumn("Genero", transform_gender(col("Genero")))
 
     # Scaling numeric values on some columns
-    df = df.withColumn("Saturación_de_la_sangre", scale_column(df["Saturación_de_la_sangre"], 100, 1).astype("int"))
-    df = df.withColumn("WBC", scale_column(df["WBC"], 1000).astype("int"))
-    df = df.withColumn("PLT", scale_column(df["PLT"], 1000).astype("int"))
+    df = df.withColumn("Saturacion_de_la_sangre", scale_column(col("Saturacion_de_la_sangre"), 100, 1).astype("int"))
+    df = df.withColumn("WBC", scale_column(col("WBC"), 1000).astype("int"))
+    df = df.withColumn("PLT", scale_column(col("PLT"), 1000).astype("int"))
 
     # Converting raw numeric values to intervals
     df = df.withColumns({
-        "Edad": eval_interval(df["Edad"], ((0, 20, 0), (20, 41, 1), (41, 61, 2), (61, 81, 3), (81, INF, 4))),
-        "Frecuencia_respiratoria": eval_interval(df["Frecuencia_respiratoria"], ((15,20,1),(20,25,2),(25,30,3),(30,35,4),(35,40,5),
+        "Edad": eval_interval(col("Edad"), ((0, 20, 0), (20, 41, 1), (41, 61, 2), (61, 81, 3), (81, INF, 4))),
+        "Frecuencia_respiratoria": eval_interval(col("Frecuencia_respiratoria"), ((15,20,1),(20,25,2),(25,30,3),(30,35,4),(35,40,5),
                                                                                  (40,45,6),(45,50,7),(50,55,8),(55,60,9),(-INF,15,10),
                                                                                  (60,INF,11))),
-        "Saturación_de_la_sangre": eval_interval(df["Saturación_de_la_sangre"], ((15,20,1),(20,25,2),(25,30,3),(30,35,4),(35,40,5),
+        "Saturacion_de_la_sangre": eval_interval(col("Saturacion_de_la_sangre"), ((15,20,1),(20,25,2),(25,30,3),(30,35,4),(35,40,5),
                                                                                  (40,45,6),(45,50,7),(50,55,8),(55,60,9),(-INF,15,10),
                                                                                  (60,INF,11))),
-        "Frecuencia_cardíaca": eval_interval(df["Frecuencia_cardíaca"], ((50,70,1),(70,90,2),(90,110,3),(110,130,4),(130,150,5),
+        "Frecuencia_cardiaca": eval_interval(col("Frecuencia_cardiaca"), ((50,70,1),(70,90,2),(90,110,3),(110,130,4),(130,150,5),
                                                                          (150,170,6),(170,190,7),(190,210,8),(-INF,50,9),
                                                                          (210,INF,10))),
-        "Presión_sistólica": eval_interval(df["Presión_sistólica"], ((50,70,1),(70,90,2),(90,110,3),(110,130,4),(130,150,5),(150,170,6),
+        "Presion_sistolica": eval_interval(col("Presion_sistolica"), ((50,70,1),(70,90,2),(90,110,3),(110,130,4),(130,150,5),(150,170,6),
                                                                      (170,190,7),(190,210,8),(-INF,50,9),(210,INF,10))),
-        "Presión_diastólica": eval_interval(df["Presión_diastólica"], ((40,50,1),(50,60,2),(60,70,3),(70,80,4),(80,90,5),(90,100,6),
+        "Presion_diastolica": eval_interval(col("Presion_diastolica"), ((40,50,1),(50,60,2),(60,70,3),(70,80,4),(80,90,5),(90,100,6),
                                                                        (100,110,7),(110,120,8),(-INF,40,9),(120,INF,10))),
-        "WBC": eval_interval(df["WBC"], ((2000,4000,1),(4000,10000,2),(10000,15000,3),(15000,20000,4),(20000,30000,5),(30000,35000,6),
+        "WBC": eval_interval(col("WBC"), ((2000,4000,1),(4000,10000,2),(10000,15000,3),(15000,20000,4),(20000,30000,5),(30000,35000,6),
                                          (-INF,2000,7),(35000,INF,8))),
-        "HB": eval_interval(df["HB"], ((6,8,1),(8,10,2),(10,12,3),(12,14,4),(14,16,5),(16,18,6),(18,20,7),(20,22,8),(-INF,6,9),(22,INF,10))),
-        "PLT": eval_interval(df["PLT"], ((10000,50000,1),(50000,100000,2),(100000,150000,3),(150000,400000,4),(400000,500000,5),(500000,600000,6),
+        "HB": eval_interval(col("HB"), ((6,8,1),(8,10,2),(10,12,3),(12,14,4),(14,16,5),(16,18,6),(18,20,7),(20,22,8),(-INF,6,9),(22,INF,10))),
+        "PLT": eval_interval(col("PLT"), ((10000,50000,1),(50000,100000,2),(100000,150000,3),(150000,400000,4),(400000,500000,5),(500000,600000,6),
                                          (600000,700000,7),(-INF,10000,8),(700000,INF,9)))
     })
 
