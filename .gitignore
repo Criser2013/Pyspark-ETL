@@ -1,8 +1,7 @@
 *.xlsx
 __pycache__
 *.csv
-*.db
-*.onnx
 .vscode
 .env
-*.pkl
+**/models/trained_pipeline
+**/models/untrained_pipeline

@@ -24,7 +24,7 @@ def fill_na_numeric(df: DataFrame) -> DataFrame:
         LOWER_BOUND = Q1 - 1.5*RIC
         UPPER_BOUND = Q3 + 1.5*RIC
 
-        df = df.withColumn(i, when(col(i).isNull(), median).otherwise(col(i)))
+        df = df.withColumn(i, when(col(i).isNull() | col(i).isNaN(), median).otherwise(col(i)))
         df = df.withColumn(i, when((col(i) < LOWER_BOUND) | (col(i) > UPPER_BOUND), median).otherwise(col(i)))
 
     return df
@@ -42,7 +42,7 @@ def fill_na_boolean(df: DataFrame) -> DataFrame:
     """
     for i in BOOLEANS_CLEANED:
         MODE = df.selectExpr(f"mode({i}) as mode").first()["mode"]
-        df = df.withColumn(i, when(col(i).isNull(), lit(MODE)).otherwise(col(i)))
+        df = df.withColumn(i, when(col(i).isNull() | col(i).isNaN(), lit(MODE)).otherwise(col(i)))
     return df
 
 
@@ -124,6 +124,7 @@ def transform_to_clean_data(df: DataFrame) -> DataFrame:
         DataFrame: A cleaned and transformed DataFrame ready for analysis or modeling.
     """
     df = df.withColumns({
+        "Fiebre": transform_fever(col("Fiebre")),
         "HB": regexp_replace("HB", ",", ".").cast("float"),
         "PLT": regexp_replace(regexp_replace("PLT", ",", "."), "OO", "00").cast("float"),
         "Hemoptisis": regexp_replace("Hemoptisis", "N0", "0").cast("int"),

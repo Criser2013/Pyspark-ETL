@@ -1,5 +1,4 @@
 from pyspark.sql import SparkSession, DataFrame
-from pyspark.sql.types import StructType
 from pandas import read_excel
 
 

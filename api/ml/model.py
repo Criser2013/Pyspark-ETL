@@ -1,4 +1,4 @@
-from constants import NUMS, BOOLEANS
+from constants import NUMS_CLEANED, BOOLEANS_CLEANED
 from pyspark.sql import DataFrame
 from pyspark.ml import Pipeline, PipelineModel
 from pyspark.ml.feature import VectorAssembler, StandardScaler
@@ -12,12 +12,13 @@ def create_model() -> Pipeline:
     Returns:
         Pipeline: An untrained ML pipeline with imputation and a classifier.
     """
-    BOOL = BOOLEANS + ["Género", "Otra Enfermedad"]
-    MODEL = MultilayerPerceptronClassifier(layers=[44, 44, 43, 44, 2], solver="l-bfgs", seed=123, labelCol="TEP")
+    BOOL = BOOLEANS_CLEANED.copy() + ["Otra_Enfermedad", "Cirugia_reciente", "Fiebre", "Genero"]
+    NUMS = NUMS_CLEANED.copy() + ["Edad"]
+    MODEL = MultilayerPerceptronClassifier(layers=[45, 44, 43, 44, 2], solver="l-bfgs", seed=123, labelCol="TEP")
 
-    ASSEMBLER_NUM = VectorAssembler(inputCols=NUMS, outputCol="num_features")
+    ASSEMBLER_NUM = VectorAssembler(inputCols=NUMS, outputCol="num_features", handleInvalid="skip")
     SCALER = StandardScaler(inputCol="num_features", outputCol="scaled_num_features", withMean=True, withStd=True)
-    ASSEMBLER_BOOL = VectorAssembler(inputCols=BOOL, outputCol="bool_features")
+    ASSEMBLER_BOOL = VectorAssembler(inputCols=BOOL, outputCol="bool_features", handleInvalid="skip")
 
     FINAL_ASSEMBLER = VectorAssembler(inputCols=["scaled_num_features", "bool_features"], outputCol="features")
 
@@ -52,6 +53,7 @@ def evaluate_model(pipeline: PipelineModel, test_data: DataFrame) -> dict:
         dict: A dictionary containing the evaluation metrics.
     """
     PREDS = pipeline.transform(test_data)
+    
     AUC_ROC = BinaryClassificationEvaluator(labelCol="TEP", rawPredictionCol="rawPrediction", metricName="areaUnderROC")
     ACCURACY = MulticlassClassificationEvaluator(labelCol="TEP", predictionCol="prediction", metricName="accuracy")
     F1 = MulticlassClassificationEvaluator(labelCol="TEP", predictionCol="prediction", metricName="f1")

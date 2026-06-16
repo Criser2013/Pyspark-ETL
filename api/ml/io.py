@@ -1,4 +1,6 @@
 from pyspark.ml import Pipeline, PipelineModel
+from pathlib import Path
+from shutil import rmtree
 
 def save_pipeline(pipeline: Pipeline, path: str):
     """
@@ -8,6 +10,9 @@ def save_pipeline(pipeline: Pipeline, path: str):
         pipeline (Pipeline): The trained machine learning pipeline to be saved.
         path (str): The file path where the pipeline will be saved.
     """
+    if Path(path).exists():
+        rmtree(path)
+
     pipeline.save(path)
 
 def load_untrained_pipeline(path: str) -> Pipeline:

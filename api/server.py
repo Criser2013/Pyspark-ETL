@@ -3,7 +3,7 @@ from etl.load import load_to_db
 from etl.transform import transform_to_clean_data, transform_ml_data
 from ml.data import split_data
 from ml.model import create_model, train_model, evaluate_model
-from ml.io import save_pipeline, load_untrained_pipeline
+from ml.io import save_pipeline, load_untrained_pipeline, load_trained_pipeline
 from constants import DTYPES, NUMS, BOOLEANS
 from pandas import DataFrame
 from pyspark.sql import SparkSession
@@ -14,6 +14,8 @@ from sqlalchemy import create_engine
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 from os import getenv
+from pathlib import Path
+from shutil import rmtree
 
 load_dotenv()
 
@@ -76,7 +78,11 @@ def load_data():
 @app.route("/instantiate-ml-pipeline", methods=["POST"])
 def instantiate_ml_pipeline():
     try:
-        PATH = "/app/models/untrained_pipeline.mllib"
+        PATH = "/app/models/untrained_pipeline"
+
+        if Path(PATH).exists():
+            rmtree(PATH)
+
         pipeline = create_model()
         save_pipeline(pipeline, PATH)
         return jsonify({"success": True, "message": "ML pipeline instantiated successfully."}), 200
@@ -100,7 +106,7 @@ def split_ml_data():
 @app.route("/train-ml-model", methods=["POST"])
 def train_ml_model():
     try:
-        path = "/app/models/untrained_pipeline.mllib"
+        path = "/app/models/untrained_pipeline"
         pipeline = load_untrained_pipeline(path)
 
         train_data = extract_sql(app.spark, "gold.train_ml_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
@@ -116,13 +122,11 @@ def train_ml_model():
 @app.route("/evaluate-ml-model", methods=["POST"])
 def evaluate_ml_model():
     try:
-        PATH = "/app/models/trained_pipeline.mllib"
+        PATH = "/app/models/trained_pipeline"
         pipeline = load_trained_pipeline(PATH)
 
         test_data = extract_sql(app.spark, "gold.test_ml_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
         metrics = evaluate_model(pipeline, test_data)
-
-        load_to_db(df_metrics, "model_metrics", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, "gold")
 
         # Save metrics to PostgreSQL using SQLAlchemy
         ENGINE = create_engine(f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
