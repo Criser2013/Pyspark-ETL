@@ -1,7 +1,6 @@
-from pandas import DataFrame
-from sklearn.model_selection import train_test_split
+from pyspark.sql import DataFrame
 
-def split_data(data: DataFrame, train_size: float = 0.8, test_size:float = 0.2):
+def split_data(data: DataFrame, train_size: float = 0.8, test_size:float = 0.2) -> tuple[DataFrame, DataFrame]:
     """
     Splits the data into training and testing sets.
 
@@ -12,8 +11,6 @@ def split_data(data: DataFrame, train_size: float = 0.8, test_size:float = 0.2):
     Returns:
         tuple[DataFrame, DataFrame]: The training and testing sets.
     """
-    train, test = train_test_split(
-        data, train_size=train_size, test_size=test_size, random_state=123, shuffle=True
-        )
+    train, test = data.randomSplit([train_size, test_size], seed=123)
     
     return train, test

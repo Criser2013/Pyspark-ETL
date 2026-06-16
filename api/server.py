@@ -1,14 +1,15 @@
 from etl.extract import extract_excel, extract_sql
 from etl.load import load_to_db
 from etl.transform import transform_to_clean_data, transform_ml_data
-"""from ml.data import split_data
+from ml.data import split_data
 from ml.model import create_model, train_model, evaluate_model
-from ml.io import save_pipeline, load_pipeline"""
+from ml.io import save_pipeline, load_untrained_pipeline
 from constants import DTYPES, NUMS, BOOLEANS
 from pandas import DataFrame
 from pyspark.sql import SparkSession
 from utils import remove_accents
 from re import sub
+from sqlalchemy import create_engine
 
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
@@ -72,10 +73,10 @@ def load_data():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 400
 
-"""@app.route("/instantiate-ml-pipeline", methods=["POST"])
+@app.route("/instantiate-ml-pipeline", methods=["POST"])
 def instantiate_ml_pipeline():
     try:
-        PATH = "/app/models/untrained_pipeline.pkl"
+        PATH = "/app/models/untrained_pipeline.mllib"
         pipeline = create_model()
         save_pipeline(pipeline, PATH)
         return jsonify({"success": True, "message": "ML pipeline instantiated successfully."}), 200
@@ -86,24 +87,24 @@ def instantiate_ml_pipeline():
 def split_ml_data():
     try:
         request_data = request.get_json()
-        df = extract_sql("SELECT * FROM gold.ml_train_pe_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
+        df = extract_sql(app.spark, "gold.ml_train_pe_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
         train, test = split_data(df, request_data["train_size"], request_data["test_size"])
 
         load_to_db(train, "train_ml_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, "gold")
         load_to_db(test, "test_ml_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, "gold")
 
-        return jsonify({"success": True, "message": f"ML data split successfully. Train: {train.shape[0]} rows, Test: {test.shape[0]} rows"}), 200
+        return jsonify({"success": True, "message": f"ML data split successfully. Train: {train.count()} rows, Test: {test.count()} rows"}), 200
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 400
 
 @app.route("/train-ml-model", methods=["POST"])
 def train_ml_model():
     try:
-        path = "/app/models/untrained_pipeline.pkl"
-        pipeline = load_pipeline(path)
+        path = "/app/models/untrained_pipeline.mllib"
+        pipeline = load_untrained_pipeline(path)
 
-        train_data = extract_sql("SELECT * FROM gold.train_ml_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
-        pipeline = train_model(pipeline, train_data.drop(columns=["TEP"]), train_data["TEP"])
+        train_data = extract_sql(app.spark, "gold.train_ml_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
+        pipeline = train_model(pipeline, train_data)
 
         path = path.replace("untrained", "trained")
         save_pipeline(pipeline, path)
@@ -115,17 +116,22 @@ def train_ml_model():
 @app.route("/evaluate-ml-model", methods=["POST"])
 def evaluate_ml_model():
     try:
-        PATH = "/app/models/trained_pipeline.pkl"
-        pipeline = load_pipeline(PATH)
+        PATH = "/app/models/trained_pipeline.mllib"
+        pipeline = load_trained_pipeline(PATH)
 
-        test_data = extract_sql("SELECT * FROM gold.test_ml_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
-        metrics = evaluate_model(pipeline, test_data.drop(columns=["TEP"]), test_data["TEP"])
+        test_data = extract_sql(app.spark, "gold.test_ml_data", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
+        metrics = evaluate_model(pipeline, test_data)
 
-        load_to_db(DataFrame(metrics, index=[0]), "model_metrics", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, "gold")
+        load_to_db(df_metrics, "model_metrics", DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME, "gold")
+
+        # Save metrics to PostgreSQL using SQLAlchemy
+        ENGINE = create_engine(f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
+        df_metrics = DataFrame(metrics, index=[0])
+        df_metrics.to_sql("model_metrics", con=ENGINE, if_exists="replace", index=False)
 
         return jsonify({"success": True, "message": "ML model evaluated successfully.", "metrics": metrics}), 200
     except Exception as e:
-        return jsonify({"success": False, "message": str(e)}), 400"""
+        return jsonify({"success": False, "message": str(e)}), 400
 
 @app.route("/healthcheck", methods=["GET"])
 def health_check():

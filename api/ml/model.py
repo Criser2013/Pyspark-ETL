@@ -1,12 +1,11 @@
 from constants import NUMS, BOOLEANS
-from pandas import DataFrame, Series
-from sklearn.neural_network import MLPClassifier
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
-from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score, roc_auc_score
+from pyspark.sql import DataFrame
+from pyspark.ml import Pipeline, PipelineModel
+from pyspark.ml.feature import VectorAssembler, StandardScaler
+from pyspark.ml.classification import MultilayerPerceptronClassifier
+from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClassificationEvaluator
 
-def create_model():
+def create_model() -> Pipeline:
     """
     Creates and returns an untrained ML pipeline for TEP prediction.
 
@@ -14,58 +13,58 @@ def create_model():
         Pipeline: An untrained ML pipeline with imputation and a classifier.
     """
     BOOL = BOOLEANS + ["Género", "Otra Enfermedad"]
-    MODEL = MLPClassifier(hidden_layer_sizes=(44,44,43,44), solver="adam", activation="tanh", random_state=123)
+    MODEL = MultilayerPerceptronClassifier(layers=[44, 44, 43, 44, 2], solver="l-bfgs", seed=123, labelCol="TEP")
 
-    IMPUTER_TRANSFORMER = ColumnTransformer(transformers=[
-        ("num", SimpleImputer(strategy="most_frequent"), NUMS),
-        ("bool", SimpleImputer(strategy="most_frequent"), BOOL),
-    ])
+    ASSEMBLER_NUM = VectorAssembler(inputCols=NUMS, outputCol="num_features")
+    SCALER = StandardScaler(inputCol="num_features", outputCol="scaled_num_features", withMean=True, withStd=True)
+    ASSEMBLER_BOOL = VectorAssembler(inputCols=BOOL, outputCol="bool_features")
 
-    PIPELINE = Pipeline(steps=[
-        ("imputer", IMPUTER_TRANSFORMER),
-        ("model", MODEL)
-    ])
+    FINAL_ASSEMBLER = VectorAssembler(inputCols=["scaled_num_features", "bool_features"], outputCol="features")
+
+    PIPELINE = Pipeline(stages=[ASSEMBLER_NUM, SCALER, ASSEMBLER_BOOL, FINAL_ASSEMBLER, MODEL])
 
     return PIPELINE
 
 
-def train_model(pipeline: Pipeline, X_train: DataFrame, y_train: Series) -> Pipeline:
+def train_model(pipeline: Pipeline, train_data: DataFrame) -> PipelineModel:
     """
     Trains the given ML pipeline on the provided training data.
 
     Args:
         pipeline (Pipeline): The ML pipeline to be trained.
-        X_train (DataFrame): The training features.
-        y_train (Series): The training labels.
+        train_data (DataFrame): The training data.
 
     Returns:
         Pipeline: The trained ML pipeline.
     """
-    pipeline.fit(X_train, y_train)
-    return pipeline
+    return pipeline.fit(train_data)
 
 
-def evaluate_model(pipeline: Pipeline, X_test: DataFrame, y_test: Series) -> dict:
+def evaluate_model(pipeline: PipelineModel, test_data: DataFrame) -> dict:
     """
     Evaluates the trained model on the test set and returns a dictionary of metrics.
 
     Args:
-        pipeline (Pipeline): The trained ML pipeline.
-        X_test (DataFrame): The test features.
-        y_test (Series): The true labels for the test set.
+        pipeline (PipelineModel): The trained ML pipeline.
+        test_data (DataFrame): The test data.
 
     Returns:
         dict: A dictionary containing the evaluation metrics.
     """
-    y_pred = pipeline.predict(X_test)
-    y_proba = pipeline.predict_proba(X_test)[:,1]
+    PREDS = pipeline.transform(test_data)
+    AUC_ROC = BinaryClassificationEvaluator(labelCol="TEP", rawPredictionCol="rawPrediction", metricName="areaUnderROC")
+    ACCURACY = MulticlassClassificationEvaluator(labelCol="TEP", predictionCol="prediction", metricName="accuracy")
+    F1 = MulticlassClassificationEvaluator(labelCol="TEP", predictionCol="prediction", metricName="f1")
+    RECALL = MulticlassClassificationEvaluator(labelCol="TEP", predictionCol="prediction", metricName="recallByLabel")
+    PRECISION = MulticlassClassificationEvaluator(labelCol="TEP", predictionCol="prediction", metricName="precisionByLabel")
+    
 
     metrics = {
-        "accuracy": accuracy_score(y_test, y_pred),
-        "f1_score": f1_score(y_test, y_pred),
-        "recall": recall_score(y_test, y_pred),
-        "precision": precision_score(y_test, y_pred),
-        "roc_auc": roc_auc_score(y_test, y_proba)
+        "accuracy": ACCURACY.evaluate(PREDS),
+        "f1_score": F1.evaluate(PREDS),
+        "recall": RECALL.evaluate(PREDS),
+        "precision": PRECISION.evaluate(PREDS),
+        "roc_auc": AUC_ROC.evaluate(PREDS)
     }
 
     return metrics
