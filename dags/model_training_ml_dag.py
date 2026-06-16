@@ -1,6 +1,5 @@
 from airflow.sdk import dag, task, Variable
-#from airflow.providers.standard.sensors.external_task import ExternalTaskSensor
-from datetime import datetime#, timedelta
+from datetime import datetime
 from requests import post
 
 import logging
@@ -11,8 +10,7 @@ import logging
     catchup=False,
     params={
         "train_size": 0.2,
-        "test_size": 0.8,
-        "model_name": "neural_network"
+        "test_size": 0.8
     }
 )
 def train_ml_model_dag():
@@ -65,35 +63,12 @@ def train_ml_model_dag():
         else:
             raise Exception(f"API request failed: {JSON['message']}")
 
-    @task(task_id="model_export")
-    def export_ml_model(api_url: str, model_name: str):
-        ENDPOINT = Variable.get("model_export_endpoint")
-        BODY = { "model_name": model_name }
-
-        RES = post(f"http://{api_url}{ENDPOINT}", json=BODY)
-        JSON = RES.json()
-        
-        if JSON["success"]:
-            logging.info(JSON["message"])
-        else:
-            raise Exception(f"API request failed: {JSON['message']}")
-    """
-    sensor_task = ExternalTaskSensor(
-        task_id="wait_for_training_data",
-        external_dag_id="data_ingestion_ml_dag",
-        external_task_id="silver_to_ml_gold",
-        execution_delta=timedelta(minutes=5)            # Looks for an execution of independent DAG 5 minutes before execution time of this DAG
-    )                                                   # On standard configuration, it will await to find an execution of the independent DAG that has the same execution timestamp as this DAG. With execution_delta, it will look for an execution with a shifted execution date.
-    """
     API_URL = Variable.get("api_url")
     instantiate_task = instantiate_pipeline(API_URL)
     split_task = split_train_test(API_URL, "{{ params.train_size }}", "{{ params.test_size }}")
     train_task = train_ml_model(API_URL)
     evaluate_task = evaluate_ml_model(API_URL)
-    export_task = export_ml_model(API_URL, "{{ params.model_name }}")
 
-    [instantiate_task, split_task] >> train_task >> [evaluate_task, export_task]
-
-    #sensor_task >> 
+    [instantiate_task, split_task] >> train_task >> evaluate_task
 
 train_ml_model_dag()

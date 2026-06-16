@@ -15,8 +15,7 @@ import logging
         "sheetName": "Total",
         "fileName": "Datos mismo archivo.xlsx",
         "ml_test_size": 0.2,
-        "ml_train_size": 0.8,
-        "model_name": "neural_network"
+        "ml_train_size": 0.8
     }
 )
 def data_ingestion_ml_dag():
@@ -71,8 +70,7 @@ def data_ingestion_ml_dag():
         trigger_dag_id="train_ml_model",
         conf={
             "train_size": "{{ params.ml_train_size }}",
-            "test_size": "{{ params.ml_test_size }}",
-            "model_name": "{{ params.model_name }}"
+            "test_size": "{{ params.ml_test_size }}"
         }
     )
 
