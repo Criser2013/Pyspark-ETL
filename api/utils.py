@@ -1,5 +1,6 @@
 from pyspark.sql.functions import when
 from pyspark.sql import Column
+from unicodedata import normalize, category
 
 
 def eval_interval(col: Column, intervals: tuple) -> Column:
@@ -34,3 +35,8 @@ def eval_interval(col: Column, intervals: tuple) -> Column:
         )
 
     return expr.otherwise(-1)
+
+
+def remove_accents(texto: str) -> str:
+    nfkd = normalize('NFKD', texto)
+    return "".join([c for c in nfkd if category(c) != 'Mn'])

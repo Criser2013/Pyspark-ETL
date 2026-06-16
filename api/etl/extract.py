@@ -4,7 +4,11 @@ from pandas import read_excel
 
 
 def extract_excel(
-    spark_session: SparkSession, path: str, schema: StructType | None = None, sheet_name: str | int = 0
+    spark_session: SparkSession,
+    path: str,
+    sheet_name: str | int = 0,
+    dtypes: dict | None = None,
+    columns: list[str] | None = None,
 ) -> DataFrame:
     """
     Reads an Excel file and returns a DataFrame. Treats common placeholders as NA.
@@ -12,15 +16,19 @@ def extract_excel(
     Args:
         spark_session (SparkSession): The PySpark session.
         path (str): The file path to the Excel file.
-        schema (StructType | None, optional): The schema for the DataFrame. Defaults to None.
         sheet_name (str|int, optional): The sheet name or index to read. Defaults to 0 (first sheet).
+        dtypes (dict | None, optional): A dictionary specifying the data types for the columns. Defaults to None.
+        columns (list[str] | None, optional): A list of column names to include in the DataFrame. Defaults to None.
 
     Returns:
         DataFrame: A PySpark DataFrame containing the data from the specified Excel sheet.
     """
     NA = ["NA", "NaN", "", "na", "N/A", "en estudio"]
-    DF = read_excel(path, sheet_name=sheet_name, na_values=NA)
-    return spark_session.createDataFrame(DF, schema=schema)
+    DF = read_excel(
+        path, sheet_name=sheet_name, na_values=NA, dtype=dtypes, usecols=columns
+    )
+
+    return spark_session.createDataFrame(DF)
 
 
 def extract_sql(
@@ -31,7 +39,6 @@ def extract_sql(
     host: str,
     port: str,
     database: str,
-    dtypes: dict | None = None,
 ) -> DataFrame:
     """
     Extracts data from a PostgreSQL database and returns a DataFrame.
