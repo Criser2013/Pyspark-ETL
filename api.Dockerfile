@@ -22,6 +22,7 @@ RUN wget https://jdbc.postgresql.org/download/postgresql-42.7.3.jar \
     -O /opt/jars/postgresql-42.7.3.jar
 
 RUN chown -R appuser:appgroup /opt/jars
+RUN chown -R appuser:appgroup /app/models
 
 HEALTHCHECK --interval=30s --timeout=5s CMD curl -o /dev/null -s -w "%{http_code}\n" localhost:5000/healthcheck || exit 1
 
