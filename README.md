@@ -63,4 +63,4 @@ psql -W --username <DB_USERNAME> --dbname <DB_NAME>
 ```
 
 ## Outcome
-ML model trained exported on ONNX ready to be deployed on web applications, also dataset ready for ML training and data analytics. Raw pipeline can be found on `/api/models` exported as **Pickle** serializable objects.
+ML model trained exported on Apache Spark format ready to be deployed on web applications, also dataset ready for ML training and data analytics. Raw pipeline can be found on `/api/models`.
