@@ -22,7 +22,7 @@ Lightweight images of **Postgres**, **Python** and **Airflow** were used to achi
 docker compose up --build -d
 ```
 
-3. After the containers started and everyone show a `healthy` status, open your web browser an go to `http://localhost:8080`.
+3. After the containers started and everyone show a `healthy` status, open your web browser and go to `http://localhost:8080`.
 4. Sign in on `Airflow UI` using the credentials declared at `.env` file.
 5. Once logged, go to **DAGS** section and trigger the DAG called `data_ingestion_ml`.
 6. Fill in the parameters acording to your preferences and run it!
