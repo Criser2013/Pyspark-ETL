@@ -1,16 +1,16 @@
 # Distributed ETL for Pulmonary Embolism prediction
 
-This is an improved variant of ETL process seen at [Pulmonary Embolism prediction using Pandas and Airflow](https://github.com/Criser2013/ADT-ETL) using **Apache Spark** framework to simulate a big data environment where **scikit** and **pandas** aren't enough to satisfy needs related with this scenario. As the same as the original repository, it works using **Apache Airflow** to orchestrate data ingestion, processing and ML models building automatically.
+This is an improved variant of ETL process seen at [Pulmonary Embolism prediction ETL with Pandas and Airflow](https://github.com/Criser2013/ADT-ETL) using **Apache Spark** framework to simulate a big data environment where **scikit** and **pandas** aren't enough to satisfy needs related with this scenario. As the same as the base project, it works using **Apache Airflow** to orchestrate data ingestion, processing and ML models building automatically.
 
 
 ## Tech stack
 
 - **`pyspark`:** To run ETL scripts simulating a distributed data environment following *Medallion architecture*.
-- **`mllib`:** To standarize data used to train ML models on a distributed data environment.
+- **`mllib`:** To standarize data and to train ML models on a distributed data environment.
 - **`airflow`:** Was used to orchestrate the entire pipeline.
-- **`flask`:** To develop a small backend server with the purpose of allowing access to **Apache Spark** features to Airflow container without needing to increase Airflow image weight and complexity adding more packages and maintaining their responsabilities separed.
-- **`postgres`:** Selected data warehouse engine.
-- **`docker compose`:** To easily run each service and allow interactions among between them.
+- **`flask`:** To develop a small backend server with the purpose of allowing access to **Apache Spark** features on Airflow container without needing to increase Airflow image weight and complexity adding more packages and maintaining their responsabilities decoupled.
+- **`postgres`:** Data warehouse engine.
+- **`docker compose`:** To easily run each service and allow interactions among them.
 
 Lightweight images of **Postgres**, **Python** and **Airflow** were used to achieve maximum performance with abscence of unnecessary dependencies.
 
